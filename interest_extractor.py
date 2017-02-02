@@ -3,7 +3,7 @@ from models import SocialNetworkStatus, Tag
 # temp imports
 import os, sys
 sys.path.insert(0, os.path.realpath('twitter/'))
-from twitter_feed_mapper import get_user_timeline_feed, get_bookmarks_feed, get_followings_feed
+from twitter_feed_mapper import get_user_timeline_feed, get_bookmarks_feed, get_followings_feed, get_public_trends_feed
 from twitter_client import get_twitter_client
 # temp to remove unsupported languages
 ##from string import ascii_letters
@@ -13,8 +13,17 @@ import json
 
 from alchemyapi import AlchemyAPI
 
-def compute_public_trends():
-    return None
+def compute_public_trends(trends):
+
+    trend_text = ''
+    for trend in trends:
+        if trend is not None:
+            
+            trend_text += (trend + " ")
+
+    print(trend_text)
+    
+    return get_named_entities(trend_text)
 
 def compute_interests():
     ### temp implementation ###
@@ -90,10 +99,17 @@ if __name__ == "__main__":
     client = get_twitter_client()
 ##    statuses = get_user_timeline_feed(client, username) + get_bookmarks_feed(client, username) + get_followings_feed(client, username)
 
-    statuses = get_user_timeline_feed(client, username)
+##    statuses = get_user_timeline_feed(client, username)
+##
+##    store_statuses(statuses)
+##
+##    compute_interests()
+    
+    lat = 7.2905720
+    long = 80.6337260
 
-    store_statuses(statuses)
+    tags = compute_public_trends(get_public_trends_feed(client, latitude=lat, longitude=long))
 
-    compute_interests()
-
+    for tag in tags:
+        print(tag.topic + " " + str(tag.context))
     

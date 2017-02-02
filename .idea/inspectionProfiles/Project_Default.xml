@@ -1,0 +1,13 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="twitter.twitter_feed_mapper.twitter_client" />
+          <option value="twitter.twitter_feed_mapper.twitter_text_analyzer" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
