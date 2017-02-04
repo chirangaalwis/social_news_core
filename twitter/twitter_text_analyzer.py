@@ -1,31 +1,60 @@
 # -*- coding: utf-8 -*-
 import re
+from nltk.tokenize import TweetTokenizer
 
 
 def refine_tweet_text(text):
-    # removes retweet/via
-    new_text = re.sub('\s?RT.*:[\s]|\s?via.*:[\s]', '', text)
-    new_text = re.sub('RT|via', '', new_text)
+    # removes re-tweet/via
+    new_text = re.sub('[\s]*RT[\s]*|[\s]*via[\s]*', '', text)
+    # new_text = re.sub('\s?RT.*:[\s]|\s?via.*:[\s]', '', text)
+
     # removes URLs
     new_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', new_text)
+
+    # refine entities
+    hashtag_pattern = re.compile('(\#\w+)')
+    username_pattern = re.compile('(\@\w+)')
+
+    for word in hashtag_pattern.findall(new_text):
+        sub = refine_entities(word)
+        if sub is not None:
+            new_text = re.sub(word, sub, new_text)
+        else:
+            new_text = re.sub(word, '', new_text)
+
+    for word in username_pattern.findall(new_text):
+        sub = refine_entities(word)
+        if sub is not None:
+            new_text = re.sub(word, sub, new_text)
+        else:
+            new_text = re.sub(word, '', new_text)
+
+    # remove starting and trailing whitespaces
+    new_text = new_text.lstrip().rstrip()
+
+    # tokenize the string and filter out non-English language usage
+    tokenizer = TweetTokenizer()
+    tokens = tokenizer.tokenize(new_text)
+    new_text = " ".join([token for token in tokens if is_english(token)])
+
     return new_text
 
 
-def refine_hashtag(hashtag):
-    refined_hashtag = hashtag
+def refine_entities(entity):
+    refined_entity = entity
 
-    if refined_hashtag.startswith('#'):
-        refined_hashtag = refined_hashtag[1:]
+    if refined_entity.startswith('#') | refined_entity.startswith('@'):
+        refined_entity = refined_entity[1:]
 
-    if not isEnglish(refined_hashtag):
+    if not is_english(refined_entity):
         return None
 
-    refined_hashtag = break_blocks(refined_hashtag)
+    refined_entity = break_blocks(refined_entity)
 
-    return refined_hashtag
+    return refined_entity
 
 
-def isEnglish(s):
+def is_english(s):
     try:
         s.encode('ascii')
     except UnicodeEncodeError:
@@ -40,7 +69,7 @@ def camel_case_split(text):
 
 
 def is_camel_case(text):
-    return (text != text.lower() and text != text.upper())
+    return text != text.lower() and text != text.upper()
 
 
 def break_blocks(text):
@@ -71,7 +100,10 @@ def break_blocks(text):
 
             non_digit = (original[index]).strip()
 
-            if is_camel_case(non_digit):
+            if '_' in non_digit:
+                split = non_digit.split('_')
+                words.extend(split)
+            elif is_camel_case(non_digit):
                 non_digit = camel_case_split(non_digit)
                 words.extend(non_digit)
             else:

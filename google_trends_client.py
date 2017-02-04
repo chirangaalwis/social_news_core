@@ -2,8 +2,8 @@ import os
 import sys
 from pytrends.request import TrendReq
 
-def get_pytrends():
 
+def get_pytrends():
     try:
         google_username = os.environ['GOOGLE_USERNAME']
         google_password = os.environ['GOOGLE_SECRET']
