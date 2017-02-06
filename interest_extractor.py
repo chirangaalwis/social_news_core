@@ -1,8 +1,5 @@
-# temp imports
-import json
-import os
-
-from social_network_helper import get_named_entities, get_status_text, load_statuses
+from social_network_helper import get_named_entities
+from social_network_data_updater import load_user_timeline_feed, load_bookmarks_feed, load_followings_feed, store_user_timeline_feed, store_bookmarks_feed
 
 
 def compute_public_trends(trends):
@@ -19,21 +16,8 @@ def compute_public_trends(trends):
 def compute_interests():
     ### temp implementation ###
 
-    file_name = "statuses.jsonl"
-    file_path = os.path.realpath('.') + '/' + file_name
-
-    for keyyear, valueyear in load_statuses(file_path).items():
-        print(keyyear)
-
-        for month, monthval in valueyear.items():
-            print(month)
-
-            for val in monthval:
-                print(val)
-
-            print()
-
-        print()
+    store_user_timeline_feed(load_user_timeline_feed())
+    store_bookmarks_feed(load_bookmarks_feed())
 
     ### temp implementation ###
 
@@ -43,20 +27,6 @@ def compute_interests():
 
 def compute_community_interests():
     return None
-
-
-def store_statuses(statuses):
-    file_name = "statuses.jsonl"
-    file_path = os.path.realpath('.') + '/' + file_name
-
-    with open(file_path, 'a+') as file:
-        for status in statuses:
-            if status.text:
-                file.write(json.dumps(get_status_text(status), default=jdefault) + "\n")
-
-
-def jdefault(o):
-    return o.__dict__
 
 
 # temp main method

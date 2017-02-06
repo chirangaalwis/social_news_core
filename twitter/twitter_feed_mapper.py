@@ -1,26 +1,16 @@
-#!/usr/bin/python3
-
 import os, sys
 from datetime import datetime
 import math
 import re
-from json import JSONDecodeError
-from pytrends.request import ResponseError, RateLimitError
-from retrying import retry
-
-from collections import OrderedDict
 
 from twitter_client import TwitterClient
 from twitter_text_analyzer import refine_tweet_text, refine_entities, is_english
 
 sys.path.insert(0, os.path.realpath('..'))
-from google_trends_client import get_pytrends
-from models import SocialNetworkStatus, ZScore
+from models import SocialNetworkFeed, SocialNetworkStatus
 
 
-class TwitterFeedMapper:
-
-    GOOGLE_TRENDS = get_pytrends()
+class TwitterFeedMapper(SocialNetworkFeed):
     CLIENT = TwitterClient()
 
     def get_public_trends_feed(self, **coordinates):
@@ -39,44 +29,7 @@ class TwitterFeedMapper:
         else:
             return world_trends
 
-    @retry(wait_exponential_multiplier=1000, wait_exponential_max=20000)
-    def get_historical_trends(self, keywords):
-        payload = {'q': keywords, 'date': 'now 1-H'}
-
-        try:
-            response = self.GOOGLE_TRENDS.trend(payload, return_type='json')
-        except (ResponseError, JSONDecodeError, RateLimitError) as exception:
-            raise Exception("Retry!")
-
-        results = OrderedDict()
-
-        for row in response['table']['rows']:
-            results.update({row['c'][0]['f']: row['c'][1]['v']})
-
-        print(str(results))
-
-        return results
-
-    def get_zscore(self, keywords):
-        historical_trends = []
-
-        for date, value in self.get_historical_trends(keywords).items():
-            historical_trends.append(value)
-
-        historical_trends = list(reversed(historical_trends))
-
-        historical_trends = [x for x in historical_trends if x is not None]
-
-        current_trend = historical_trends[0]
-
-        historical_trends = historical_trends[1:]
-
-        z_score = ZScore(0.9, historical_trends)
-        return z_score.score(current_trend)
-
-
-
-    def get_user_timeline_feed(self, username):
+    def get_user_timeline_feed(self):
         # capture the optional id value of the tweet since which tweets are to be returned
         last_id = None
         ids = self._load_latest_status_ids()
@@ -85,9 +38,9 @@ class TwitterFeedMapper:
 
         # load tweets from user timeline
         if last_id is None:
-            tweets = self.CLIENT.client.user_timeline(screen_name=username, count=30)
+            tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, count=5)
         else:
-            tweets = self.CLIENT.client.user_timeline(screen_name=username, since_id=last_id)
+            tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, since_id=last_id)
 
         # convert tweets to application specific status objects
         statuses = self._convert_tweets_to_native_statuses(tweets)
@@ -97,18 +50,18 @@ class TwitterFeedMapper:
 
         return statuses
 
-    def get_bookmarks_feed(self, username, **optional):
+    def get_bookmarks_feed(self):
         # capture the optional id value of the tweet since which tweets are to be returned
         last_id = None
         ids = self._load_latest_status_ids()
-        if ('bookmarks' in ids):
+        if 'bookmarks' in ids:
             last_id = ids['bookmarks']
 
         # load tweets from favorites
         if last_id is None:
-            tweets = self.CLIENT.client.favorites(screen_name=username, count=30)
+            tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, count=5)
         else:
-            tweets = self.CLIENT.client.favorites(screen_name=username, since_id=last_id)
+            tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, since_id=last_id)
 
         # convert tweets to application specific status objects
         statuses = self._convert_tweets_to_native_statuses(tweets)
@@ -118,34 +71,36 @@ class TwitterFeedMapper:
 
         return statuses
 
-    def get_followings_feed(self, username):
-        tweets = self.CLIENT.client.home_timeline(screen_name=username, count=50)
+    def get_followings_feed(self):
+        tweets = self.CLIENT.client.home_timeline(screen_name=self.CLIENT.username, count=5)
 
         # convert tweets to application specific status objects
         statuses = self._convert_tweets_to_native_statuses(tweets)
 
         return statuses
 
+    def get_community_feed(self):
+        lists = self.CLIENT.client.lists_all(screen_name=self.CLIENT.username)
+
+        statuses = []
+        for group in lists:
+            statuses.extend(self.CLIENT.client.list_timeline(group.user.screen_name, group.slug, count=10))
+
+        return self._convert_tweets_to_native_statuses(statuses)
+
     # support functions
     def _convert_tweets_to_native_statuses(self, tweets):
         statuses = []
 
         for tweet in tweets:
-            print(tweet.text)
-
-            print(refine_tweet_text(tweet.text))
-
-            print()
-
-        # for tweet in tweets:
-        #     statuses.append(SocialNetworkStatus(native_identifier=tweet.id, text=refine_tweet_text(tweet.text),
-        #                                         created=str(tweet.created_at), score=self._generate_tweet_score(tweet)))
+            statuses.append(SocialNetworkStatus(native_identifier=tweet.id, text=refine_tweet_text(tweet.text),
+                                                created=str(tweet.created_at), score=self._generate_tweet_score(tweet)))
 
         return statuses
 
     @staticmethod
     def _load_latest_status_ids():
-        file_name = "since_ids.txt"
+        file_name = "twitter_since_ids.txt"
         file_path = os.path.realpath('.') + '/' + file_name
 
         ids = dict()
@@ -160,7 +115,7 @@ class TwitterFeedMapper:
         return ids
 
     def _update_latest_status_ids(self, key, value):
-        file_name = "since_ids.txt"
+        file_name = "twitter_since_ids.txt"
         file_path = os.path.realpath('.') + '/' + file_name
 
         ids = self._load_latest_status_ids()
@@ -170,11 +125,12 @@ class TwitterFeedMapper:
             for key, value in ids.items():
                 file.write(key + ":" + str(value) + "\n")
 
-    def _generate_tweet_score(self, tweet):
+    @staticmethod
+    def _generate_tweet_score(tweet):
         starting_score = 100
-        starting_score = starting_score + (10 * tweet.retweet_count)
-        starting_score = starting_score + (1 * tweet.favorite_count)
-        baseScore = math.log(max(starting_score, 1))
+        starting_score += 10 * tweet.retweet_count
+        starting_score += 1 * tweet.favorite_count
+        base_score = math.log(max(starting_score, 1))
 
         time_difference = (datetime.now() - tweet.created_at)
         time_difference_in_days = (time_difference.days * 86400 + time_difference.seconds) / 86400
@@ -182,10 +138,10 @@ class TwitterFeedMapper:
         # start decaying the score after two days
         dropoff = 2
         if time_difference_in_days > dropoff:
-            baseScore = baseScore * math.exp(
+            base_score *= math.exp(
                 -5 * (time_difference_in_days - dropoff) * (time_difference_in_days - dropoff))
 
-        return baseScore
+        return base_score
 
     def get_twitter_trends(self, woeid):
         response_data = self.CLIENT.client.trends_place(woeid)
@@ -229,3 +185,7 @@ if __name__ == "__main__":
     #
     # print(string)
 
+    list = mapper.get_community_feed()
+
+    for item in list:
+        print(item.text + ": " + str(item.score))

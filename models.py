@@ -1,6 +1,23 @@
 from math import sqrt
 
 
+class SocialNetworkFeed:
+    def get_public_trends_feed(self, **coordinates):
+        pass
+
+    def get_user_timeline_feed(self):
+        pass
+
+    def get_bookmarks_feed(self):
+        pass
+
+    def get_followings_feed(self):
+        pass
+
+    def get_community_feed(self):
+        pass
+
+
 class SocialNetworkStatus:
     def __init__(self, text, score, native_identifier=None, created=None):
         self.id = native_identifier
@@ -47,19 +64,36 @@ class Tag:
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            topic_equals = (self.topic == other.topic)
-            context_equals = (set(self.context) == set(other.context))
+            topic_equals = (self.topic.lower() == other.topic.lower())
+            type_equals = (self.context['type'] == other.context['type'])
+            sub_type_equals = (set(self.context['sub_types']) == set(other.context['sub_types']))
 
-            return topic_equals & context_equals
+            return topic_equals & type_equals & sub_type_equals
         else:
             return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        product_of_context = 1
+        for character in self.topic:
+            product_of_context *= ord(character)
+
+        for character in self.context['type']:
+            product_of_context *= ord(character)
+
+        for value in self.context['sub_types']:
+            for character in value:
+                product_of_context *= ord(character)
+
+        return product_of_context
+
 
 class ZScore:
-    def __init__(self, decay, past=[]):
+    def __init__(self, decay, past=None):
+        if past is None:
+            past = []
         self.sqrAvg = self.avg = 0
 
         # The rate at which the historic data's effect will diminish.
