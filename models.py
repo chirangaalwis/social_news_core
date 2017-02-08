@@ -58,17 +58,19 @@ class SocialNetworkTrend:
 
 
 class Tag:
-    def __init__(self, topic, context):
+    def __init__(self, topic, context, context_fraction=0):
         self.topic = topic
         self.context = context
+        self.context_fraction = context_fraction
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             topic_equals = (self.topic.lower() == other.topic.lower())
             type_equals = (self.context['type'] == other.context['type'])
-            sub_type_equals = (set(self.context['sub_types']) == set(other.context['sub_types']))
+            # sub_type_equals = (set(self.context['sub_types']) == set(other.context['sub_types']))
 
-            return topic_equals & type_equals & sub_type_equals
+            # return topic_equals & type_equals & sub_type_equals
+            return topic_equals & type_equals
         else:
             return False
 

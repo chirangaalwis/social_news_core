@@ -5,7 +5,6 @@ import re
 
 from twitter_client import TwitterClient
 from twitter_text_analyzer import refine_tweet_text, refine_entities, is_english
-
 sys.path.insert(0, os.path.realpath('..'))
 from models import SocialNetworkFeed, SocialNetworkStatus
 
@@ -38,7 +37,7 @@ class TwitterFeedMapper(SocialNetworkFeed):
 
         # load tweets from user timeline
         if last_id is None:
-            tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, count=5)
+            tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, count=10)
         else:
             tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, since_id=last_id)
 
@@ -59,7 +58,7 @@ class TwitterFeedMapper(SocialNetworkFeed):
 
         # load tweets from favorites
         if last_id is None:
-            tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, count=5)
+            tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, count=10)
         else:
             tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, since_id=last_id)
 
@@ -132,14 +131,13 @@ class TwitterFeedMapper(SocialNetworkFeed):
         starting_score += 1 * tweet.favorite_count
         base_score = math.log(max(starting_score, 1))
 
-        time_difference = (datetime.now() - tweet.created_at)
-        time_difference_in_days = (time_difference.days * 86400 + time_difference.seconds) / 86400
-
-        # start decaying the score after two days
-        dropoff = 2
-        if time_difference_in_days > dropoff:
-            base_score *= math.exp(
-                -5 * (time_difference_in_days - dropoff) * (time_difference_in_days - dropoff))
+        # time_difference = (datetime.now() - tweet.created_at)
+        # time_difference_in_days = (time_difference.days * 86400 + time_difference.seconds) / 86400
+        #
+        # dropoff = 2
+        # if time_difference_in_days > dropoff:
+        #     base_score *= math.exp(
+        #         -5 * (time_difference_in_days - dropoff) * (time_difference_in_days - dropoff))
 
         return base_score
 

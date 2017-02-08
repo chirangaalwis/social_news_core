@@ -1,5 +1,11 @@
-from social_network_helper import get_named_entities
-from social_network_data_updater import load_user_timeline_feed, load_bookmarks_feed, load_followings_feed, store_user_timeline_feed, store_bookmarks_feed
+from social_network_helper import get_named_entities, load_statuses
+from social_network_data_updater import load_user_timeline_feed, load_bookmarks_feed, load_followings_feed, \
+    store_user_timeline_feed, store_bookmarks_feed
+
+import os
+
+STATUSES_FILE_PATH = os.path.realpath('.') + '/statuses.jsonl'
+BOOKMARKS_FILE_PATH = os.path.realpath('.') + '/bookmarks.jsonl'
 
 
 def compute_public_trends(trends):
@@ -16,8 +22,36 @@ def compute_public_trends(trends):
 def compute_interests():
     ### temp implementation ###
 
-    store_user_timeline_feed(load_user_timeline_feed())
-    store_bookmarks_feed(load_bookmarks_feed())
+    # store_user_timeline_feed(load_user_timeline_feed())
+    # store_bookmarks_feed(load_bookmarks_feed())
+
+
+    dictionary = load_statuses(STATUSES_FILE_PATH)
+
+    for year, months in dictionary.items():
+
+        print('Year: ' + str(year))
+
+        for month, statuses in months.items():
+
+            print('Month: ' + str(month))
+
+            for status in statuses:
+                if len(status['Tags']) == 0:
+                    continue
+
+                print('Status score: ' + str(status['Score']))
+                for tag in status['Tags']:
+                    print('Entity: ' + tag['topic'])
+                    print('Score: ' + str(tag['context_fraction'] * status['Score']))
+                    print('Type: ' + tag['context']['type'])
+                    print()
+                print()
+
+            print()
+
+        print()
+
 
     ### temp implementation ###
 
@@ -31,7 +65,6 @@ def compute_community_interests():
 
 # temp main method
 if __name__ == "__main__":
-
     # username = sys.argv[1]
 
     # lat = 7.2905720
@@ -43,4 +76,3 @@ if __name__ == "__main__":
     #     print(tag.topic + " " + str(tag.context))
 
     compute_interests()
-

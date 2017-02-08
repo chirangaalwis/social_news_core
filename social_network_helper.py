@@ -2,12 +2,14 @@ import os
 import json
 import re
 from datetime import datetime
+import math
 from retrying import retry
 from collections import OrderedDict
 import pyld
 import rdflib
 import requests
 from json import JSONDecodeError
+from urllib.error import HTTPError
 
 from pytrends.request import ResponseError, RateLimitError
 from alchemyapi import AlchemyAPI
@@ -15,7 +17,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON, SPARQLExceptions
 
 from models import Tag, ZScore
 from google_trends_client import get_pytrends
-from social_network_text_refinement import camel_case_split
+from social_network_text_refinement import camel_case_split, entity_fraction_from_text
 
 GOOGLE_TRENDS = get_pytrends()
 
@@ -56,33 +58,51 @@ def get_zscore(keywords):
 
 
 def get_named_entities(text):
-    tags = []
-
     # Create the AlchemyAPI Object
     alchemy_api = AlchemyAPI()
 
     response = alchemy_api.entities('text', text)
 
+    entities = []
     if response['status'] == 'OK':
         for entity in response['entities']:
-
-            print(entity['text'])
-            data = get_ontology_data(entity['text'])
-            if not data:
-                data = get_ontology_data(entity['text'])
-
-            print(data)
-
-            for datum in data:
-                context = {'type': datum[1], 'description': datum[2], 'sub_types': datum[4] }
-                tags.append(Tag(datum[0], context))
-
+            entities.append(entity['text'])
     else:
         print('Error in entity extraction call: ', response['statusInfo'])
+
+    entities = entity_fraction_from_text(entities, text)
+
+    print(entities)
+    print(type(entities))
+    print(text)
+
+    tags = []
+
+    for entity in entities:
+
+        print(entity)
+
+        data = get_ontology_data(entity['entity'])
+
+
+        if not data:
+            data = get_ontology_data(entity['entity'])
+
+        for datum in data:
+
+            # TODO: to be fixed DBpedia issue
+            # context = {'type': datum[1], 'description': datum[2], 'sub_types': datum[4]}
+
+            context = {'type': datum[1], 'description': datum[2]}
+
+            tag = Tag(datum[0], context, context_fraction=entity['fraction'])
+            if tag not in tags:
+                tags.append(tag)
 
     return tags
 
 
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000)
 def get_ontology_types(subject):
     sparql = SPARQLWrapper("http://dbpedia.org/sparql")
 
@@ -95,13 +115,12 @@ def get_ontology_types(subject):
             FILTER (strstarts(str(?labels), "http://dbpedia.org/ontology/"))
         }
     """ % subject)
+
     sparql.setReturnFormat(JSON)
-    # results = sparql.query().convert()
-    results = None
     try:
         results = sparql.query().convert()
-    except (SPARQLExceptions.EndPointInternalError, SPARQLExceptions.QueryBadFormed):
-        pass
+    except (SPARQLExceptions.EndPointInternalError, SPARQLExceptions.QueryBadFormed, HTTPError):
+        raise Exception("Retry!")
 
     types = []
     if results:
@@ -158,6 +177,8 @@ def get_google_knowledge_graph_result(keyword):
 def get_ontology_data(keyword):
     result = get_google_knowledge_graph_result(keyword)
 
+    print(result)
+
     if not result:
         return []
 
@@ -181,8 +202,13 @@ def get_ontology_data(keyword):
         results.extend(results[2].rsplit(',', 1))
         del results[2]
 
-        types = get_ontology_types(results[0])
-        results.append(list(set(types) - {results[1].lower()}))
+        # TODO: check DBpedia bug
+
+        # types = get_ontology_types(results[0])
+        #
+        # print(types)
+        #
+        # results.append(list(set(types) - {results[1].lower()}))
 
         entities.append(results)
 
@@ -200,6 +226,8 @@ def get_ontology_data(keyword):
 
         result = float(entity[3])
         index += 1
+
+    print(entities)
 
     return entities[:index]
 
@@ -223,6 +251,7 @@ def load_statuses(file_path):
 
             created_at = datetime.strptime(status['Created_At'], "%Y-%m-%d %H:%M:%S")
             status['Created_At'] = created_at
+            status['Score'] = decay_base_score(status['Score'], created_at)
 
             if status['Created_At'].year in statuses:
 
@@ -268,6 +297,21 @@ def get_entity_diversity(statuses):
     return without_duplicates / total_size
 
 
+def decay_base_score(base_score, created_at):
+    time_difference = (datetime.now() - created_at)
+    time_difference_in_days = (time_difference.days * 86400 + time_difference.seconds) / 86400
+
+    # start decaying the score after two days
+    drop_off = 2
+    if time_difference_in_days > drop_off:
+        decayed_score = base_score * math.exp(
+            -5 * (time_difference_in_days - drop_off) * (time_difference_in_days - drop_off))
+    else:
+        decayed_score = base_score
+
+    return decayed_score
+
+
 def convert_dictionary_to_tag(dictionary):
     if not dictionary:
         return None
@@ -284,6 +328,22 @@ if __name__ == "__main__":
     # statuses = load_statuses(os.path.realpath('.') + '/statuses.jsonl')
     # print(get_entity_diversity(statuses[2017][2]))
 
-    print(get_ontology_data('castillo io'))
+    # print(get_ontology_data('castillo io'))
 
-    print(get_ontology_data('fergie'))
+    # print(get_ontology_data('fergie'))
+
+    string = 'It is only two months since Henrikh Mkhitaryan was the man in the same position Anthony Martial ' \
+             'currently finds himself in. Held accountable for a poor workrate in the derby defeat to Manchester City ' \
+             'in September, Mkhitaryan had to take the long road back into Jose Mourinho’s plans. Mkhitaryan is ' \
+             'a great player. Martial must learn from Mkhitaryan. Hail Henrikh Mkhitaryan. Come one Henrikh!!! ' \
+             'European Organization for Nuclear Research is a great place to be. Anthony Martial has been to the ' \
+             'Nuclear ' \
+             'Research center. '
+
+    for tag in get_named_entities(string):
+        print('topic: ' + tag.topic)
+        print('context: ' + str(tag.context))
+        print('fraction: ' + str(tag.context_fraction))
+        print()
+
+    # print(get_ontology_data('paulpogba'))
