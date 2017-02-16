@@ -12,6 +12,21 @@ STATUSES_FILE_PATH = os.path.realpath('.') + '/statuses.jsonl'
 BOOKMARKS_FILE_PATH = os.path.realpath('.') + '/bookmarks.jsonl'
 
 
+# TODO: TEMP CO-ORDINATES
+LATITUDE = 7.2905720
+LONGITUDE = 80.6337260
+
+
+def load_trends():
+    trends = []
+
+    for feed in SOCIAL_NETWORK_FEED:
+        if isinstance(feed, SocialNetworkFeed):
+            trends.extend(feed.get_public_trends_feed(latitude=LATITUDE, longitude=LONGITUDE))
+
+    return trends
+
+
 def load_user_timeline_feed():
     statuses = []
 

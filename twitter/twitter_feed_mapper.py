@@ -1,10 +1,10 @@
 import os, sys
-from datetime import datetime
 import math
 import re
 
 from twitter_client import TwitterClient
 from twitter_text_analyzer import refine_tweet_text, refine_entities, is_english
+
 sys.path.insert(0, os.path.realpath('..'))
 from models import SocialNetworkFeed, SocialNetworkStatus
 
@@ -24,6 +24,7 @@ class TwitterFeedMapper(SocialNetworkFeed):
             local_trends = self.get_twitter_trends(locality_woeid)
 
             merged_trends = list(set(world_trends) | set(local_trends))
+
             return merged_trends
         else:
             return world_trends
@@ -131,14 +132,6 @@ class TwitterFeedMapper(SocialNetworkFeed):
         starting_score += 1 * tweet.favorite_count
         base_score = math.log(max(starting_score, 1))
 
-        # time_difference = (datetime.now() - tweet.created_at)
-        # time_difference_in_days = (time_difference.days * 86400 + time_difference.seconds) / 86400
-        #
-        # dropoff = 2
-        # if time_difference_in_days > dropoff:
-        #     base_score *= math.exp(
-        #         -5 * (time_difference_in_days - dropoff) * (time_difference_in_days - dropoff))
-
         return base_score
 
     def get_twitter_trends(self, woeid):
@@ -186,4 +179,4 @@ if __name__ == "__main__":
     list = mapper.get_community_feed()
 
     for item in list:
-        print(item.text + ": " + str(item.score))
+        print(item.text + ": " + str(item.get_score))

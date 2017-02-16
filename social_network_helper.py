@@ -24,7 +24,7 @@ GOOGLE_TRENDS = get_pytrends()
 
 @retry(wait_exponential_multiplier=1000, wait_exponential_max=20000)
 def get_historical_trends(keywords):
-    payload = {'q': keywords, 'date': 'now 1-H'}
+    payload = {'q': keywords, 'date': 'now 12-H'}
 
     try:
         response = GOOGLE_TRENDS.trend(payload, return_type='json')
@@ -54,7 +54,7 @@ def get_zscore(keywords):
     historical_trends = historical_trends[1:]
 
     z_score = ZScore(0.9, historical_trends)
-    return z_score.score(current_trend)
+    return z_score.get_score(current_trend)
 
 
 def get_named_entities(text):
@@ -72,18 +72,11 @@ def get_named_entities(text):
 
     entities = entity_fraction_from_text(entities, text)
 
-    print(entities)
-    print(type(entities))
-    print(text)
-
     tags = []
 
     for entity in entities:
 
-        print(entity)
-
         data = get_ontology_data(entity['entity'])
-
 
         if not data:
             data = get_ontology_data(entity['entity'])
@@ -177,8 +170,6 @@ def get_google_knowledge_graph_result(keyword):
 def get_ontology_data(keyword):
     result = get_google_knowledge_graph_result(keyword)
 
-    print(result)
-
     if not result:
         return []
 
@@ -227,8 +218,6 @@ def get_ontology_data(keyword):
         result = float(entity[3])
         index += 1
 
-    print(entities)
-
     return entities[:index]
 
 
@@ -237,7 +226,7 @@ def get_status_text(status):
     if status.text:
         tags = get_named_entities(status.text)
 
-    status_record = {'Id': status.id, 'Created_At': status.created, 'Score': status.score, 'Tags': tags}
+    status_record = {'Id': status.id, 'Created_At': status.created, 'Score': status.get_score, 'Tags': tags}
 
     return status_record
 
@@ -324,6 +313,9 @@ def convert_dictionary_to_tag(dictionary):
 
 if __name__ == "__main__":
     # print(get_historical_trends('Manchester United'))
+    # print(get_zscore('Manchester United'))
+    # print(get_zscore('Liverpool'))
+    print(get_zscore(['Real Madrid C.F.', '‪CA Osasuna']))
 
     # statuses = load_statuses(os.path.realpath('.') + '/statuses.jsonl')
     # print(get_entity_diversity(statuses[2017][2]))
@@ -332,18 +324,18 @@ if __name__ == "__main__":
 
     # print(get_ontology_data('fergie'))
 
-    string = 'It is only two months since Henrikh Mkhitaryan was the man in the same position Anthony Martial ' \
-             'currently finds himself in. Held accountable for a poor workrate in the derby defeat to Manchester City ' \
-             'in September, Mkhitaryan had to take the long road back into Jose Mourinho’s plans. Mkhitaryan is ' \
-             'a great player. Martial must learn from Mkhitaryan. Hail Henrikh Mkhitaryan. Come one Henrikh!!! ' \
-             'European Organization for Nuclear Research is a great place to be. Anthony Martial has been to the ' \
-             'Nuclear ' \
-             'Research center. '
-
-    for tag in get_named_entities(string):
-        print('topic: ' + tag.topic)
-        print('context: ' + str(tag.context))
-        print('fraction: ' + str(tag.context_fraction))
-        print()
+    # string = 'It is only two months since Henrikh Mkhitaryan was the man in the same position Anthony Martial ' \
+    #          'currently finds himself in. Held accountable for a poor workrate in the derby defeat to Manchester City ' \
+    #          'in September, Mkhitaryan had to take the long road back into Jose Mourinho’s plans. Mkhitaryan is ' \
+    #          'a great player. Martial must learn from Mkhitaryan. Hail Henrikh Mkhitaryan. Come one Henrikh!!! ' \
+    #          'European Organization for Nuclear Research is a great place to be. Anthony Martial has been to the ' \
+    #          'Nuclear ' \
+    #          'Research center. '
+    #
+    # for tag in get_named_entities(string):
+    #     print('topic: ' + tag.topic)
+    #     print('context: ' + str(tag.context))
+    #     print('fraction: ' + str(tag.context_fraction))
+    #     print()
 
     # print(get_ontology_data('paulpogba'))

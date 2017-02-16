@@ -67,6 +67,9 @@ class Tag:
         if isinstance(other, self.__class__):
             topic_equals = (self.topic.lower() == other.topic.lower())
             type_equals = (self.context['type'] == other.context['type'])
+
+            # TODO: CHANGE ONCE DBPEDIA ISSUE IS FIXED
+
             # sub_type_equals = (set(self.context['sub_types']) == set(other.context['sub_types']))
 
             # return topic_equals & type_equals & sub_type_equals
@@ -85,9 +88,11 @@ class Tag:
         for character in self.context['type']:
             product_of_context *= ord(character)
 
-        for value in self.context['sub_types']:
-            for character in value:
-                product_of_context *= ord(character)
+        # TODO: CHANGE ONCE DBPEDIA ISSUE IS FIXED
+
+        # for value in self.context['sub_types']:
+        #     for character in value:
+        #         product_of_context *= ord(character)
 
         return product_of_context
 
@@ -98,29 +103,27 @@ class ZScore:
             past = []
         self.sqrAvg = self.avg = 0
 
-        # The rate at which the historic data's effect will diminish.
+        # The rate at which the historic data's effect will diminish
         self.decay = decay
 
         for x in past: self.update(x)
 
     def update(self, value):
-        # Set initial averages to the first value in the sequence.
+        # Set initial averages to the first value in the sequence
         if self.avg == 0 and self.sqrAvg == 0:
             self.avg = float(value)
             self.sqrAvg = float((value ** 2))
-        # Calculate the average of the rest of the values using a
-        # floating average.
+        # Calculate the average of the rest of the values using a floating average
         else:
             self.avg = self.avg * self.decay + value * (1 - self.decay)
             self.sqrAvg = self.sqrAvg * self.decay + (value ** 2) * (1 - self.decay)
         return self
 
-    def std(self):
-        # Somewhat ad-hoc standard deviation calculation.
+    def standard_deviation(self):
         return sqrt(self.sqrAvg - self.avg ** 2)
 
-    def score(self, obs):
-        if self.std() == 0:
+    def get_score(self, obs):
+        if self.standard_deviation() == 0:
             return (obs - self.avg) * float("infinity")
         else:
-            return (obs - self.avg) / self.std()
+            return (obs - self.avg) / self.standard_deviation()
