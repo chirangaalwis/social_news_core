@@ -3,7 +3,7 @@ import math
 import re
 
 from twitter_client import TwitterClient
-from twitter_text_analyzer import refine_tweet_text, refine_entities, is_english
+from twitter_text_analyzer import refine_tweet_text, refine_entities
 
 sys.path.insert(0, os.path.realpath('..'))
 from models import SocialNetworkFeed, SocialNetworkStatus
@@ -23,7 +23,9 @@ class TwitterFeedMapper(SocialNetworkFeed):
             locality_woeid = response_data[0]['woeid']
             local_trends = self.get_twitter_trends(locality_woeid)
 
-            merged_trends = list(set(world_trends) | set(local_trends))
+            # merged_trends = list(set(world_trends) | set(local_trends))
+
+            merged_trends = list(set(world_trends))
 
             return merged_trends
         else:

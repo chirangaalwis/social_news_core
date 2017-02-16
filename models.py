@@ -38,18 +38,16 @@ class SocialNetworkStatus:
 
 
 class SocialNetworkTrend:
-    def __init__(self, tags, score):
-        self.tags = tags
+    def __init__(self, topic, score):
+        self.topic = topic
         self.score = score
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            for tag in self.tags:
-                exists = any(other_tag == tag for other_tag in other.tags)
-                if not exists:
-                    return False
-
-            return True
+            if self.topic == other.topic:
+                return True
+            else:
+                return False
         else:
             return False
 

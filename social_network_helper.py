@@ -2,6 +2,7 @@ import os
 import json
 import re
 from datetime import datetime
+from time import sleep
 import math
 from retrying import retry
 from collections import OrderedDict
@@ -15,14 +16,14 @@ from pytrends.request import ResponseError, RateLimitError
 from alchemyapi import AlchemyAPI
 from SPARQLWrapper import SPARQLWrapper, JSON, SPARQLExceptions
 
-from models import Tag, ZScore
+from models import SocialNetworkTrend, Tag, ZScore
 from google_trends_client import get_pytrends
 from social_network_text_refinement import camel_case_split, entity_fraction_from_text
 
 GOOGLE_TRENDS = get_pytrends()
 
 
-@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000)
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000, stop_max_delay=120000)
 def get_historical_trends(keywords):
     payload = {'q': keywords, 'date': 'now 12-H'}
 
@@ -41,8 +42,17 @@ def get_historical_trends(keywords):
 
 def get_zscore(keywords):
     historical_trends = []
+    data = {}
 
-    for date, value in get_historical_trends(keywords).items():
+    try:
+        data = get_historical_trends(keywords)
+    except Exception:
+        print('arrived')
+
+    if not data:
+        return -1
+
+    for date, value in data.items():
         historical_trends.append(value)
 
     historical_trends = list(reversed(historical_trends))
@@ -55,6 +65,21 @@ def get_zscore(keywords):
 
     z_score = ZScore(0.9, historical_trends)
     return z_score.get_score(current_trend)
+
+
+def get_social_trend(index, queue, results):
+    # temp
+    factor = int(index / 4)
+    print('sleeping ' + str(factor * 60))
+    sleep(factor * 60)
+
+    term = queue.get()
+
+    print(term)
+
+    z_score = get_zscore(term)
+    results.append(SocialNetworkTrend(topic=term, score=z_score))
+    queue.task_done()
 
 
 def get_named_entities(text):
