@@ -94,6 +94,7 @@ def get_named_entities(text):
             entities.append(entity['text'])
     else:
         print('Error in entity extraction call: ', response['statusInfo'])
+        return []
 
     entities = entity_fraction_from_text(entities, text)
 
@@ -120,10 +121,12 @@ def get_named_entities(text):
     return tags
 
 
-@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000)
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000, stop_max_delay=120000)
 def get_ontology_types(subject):
-    sparql = SPARQLWrapper("http://dbpedia.org/sparql")
+    if subject is None:
+        return None
 
+    sparql = SPARQLWrapper("http://dbpedia.org/sparql")
     sparql.setQuery("""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -137,7 +140,8 @@ def get_ontology_types(subject):
     sparql.setReturnFormat(JSON)
     try:
         results = sparql.query().convert()
-    except (SPARQLExceptions.EndPointInternalError, SPARQLExceptions.QueryBadFormed, HTTPError):
+    except (HTTPError, SPARQLExceptions.EndPointInternalError,
+            SPARQLExceptions.EndPointNotFound, SPARQLExceptions.QueryBadFormed):
         raise Exception("Retry!")
 
     types = []
@@ -145,7 +149,7 @@ def get_ontology_types(subject):
         for result in results["results"]["bindings"]:
             words = camel_case_split((result["labels"]["value"]).replace("http://dbpedia.org/ontology/", ""))
             split = " ".join(words)
-            types.append(split.lower())
+            types.append(split.lower().title())
 
     return types
 
@@ -337,10 +341,17 @@ def convert_dictionary_to_tag(dictionary):
 
 
 if __name__ == "__main__":
+
+    print(get_ontology_types('Manchester United F.C.'))
+    print(get_ontology_types('Mona Lisa'))
+    print(get_ontology_types('Mahinda Rajapaksa'))
+    print(get_ontology_types('José Mourinho'))
+    print(get_ontology_types('The Count of Monte Cristo'))
+
     # print(get_historical_trends('Manchester United'))
     # print(get_zscore('Manchester United'))
     # print(get_zscore('Liverpool'))
-    print(get_zscore(['Real Madrid C.F.', '‪CA Osasuna']))
+    # print(get_zscore(['Real Madrid C.F.', '‪CA Osasuna']))
 
     # statuses = load_statuses(os.path.realpath('.') + '/statuses.jsonl')
     # print(get_entity_diversity(statuses[2017][2]))

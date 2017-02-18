@@ -1,12 +1,13 @@
-import os, sys
-import math
-import re
+import os
+import sys
+from tweepy.error import TweepError
 
 from twitter_client import TwitterClient
-from twitter_text_analyzer import refine_tweet_text, refine_entities
-
+from twitter_helper import convert_tweets_to_native_statuses, load_latest_status_ids, update_latest_status_ids,\
+    get_member_instance
+from twitter_text_analyzer import refine_entities, refine_tweet_text
 sys.path.insert(0, os.path.realpath('..'))
-from models import SocialNetworkFeed, SocialNetworkStatus
+from models import SocialNetworkFeed
 
 
 class TwitterFeedMapper(SocialNetworkFeed):
@@ -14,8 +15,8 @@ class TwitterFeedMapper(SocialNetworkFeed):
 
     def get_public_trends_feed(self, **coordinates):
         # get world trends
-        global_woeid = 1
-        world_trends = self.get_twitter_trends(global_woeid)
+        global_woe_id = 1
+        world_trends = self.get_twitter_trends(global_woe_id)
 
         if ('latitude' in coordinates) & ('longitude' in coordinates):
             # get local trends
@@ -23,9 +24,7 @@ class TwitterFeedMapper(SocialNetworkFeed):
             locality_woeid = response_data[0]['woeid']
             local_trends = self.get_twitter_trends(locality_woeid)
 
-            # merged_trends = list(set(world_trends) | set(local_trends))
-
-            merged_trends = list(set(world_trends))
+            merged_trends = list(set(world_trends) | set(local_trends))
 
             return merged_trends
         else:
@@ -34,7 +33,7 @@ class TwitterFeedMapper(SocialNetworkFeed):
     def get_user_timeline_feed(self):
         # capture the optional id value of the tweet since which tweets are to be returned
         last_id = None
-        ids = self._load_latest_status_ids()
+        ids = load_latest_status_ids()
         if 'user_timeline' in ids:
             last_id = ids['user_timeline']
 
@@ -45,17 +44,17 @@ class TwitterFeedMapper(SocialNetworkFeed):
             tweets = self.CLIENT.client.user_timeline(screen_name=self.CLIENT.username, since_id=last_id)
 
         # convert tweets to application specific status objects
-        statuses = self._convert_tweets_to_native_statuses(tweets)
+        statuses = convert_tweets_to_native_statuses(tweets)
 
         if len(statuses) > 0:
-            self._update_latest_status_ids('user_timeline', statuses[0].id)
+            update_latest_status_ids('user_timeline', statuses[0].id)
 
         return statuses
 
     def get_bookmarks_feed(self):
         # capture the optional id value of the tweet since which tweets are to be returned
         last_id = None
-        ids = self._load_latest_status_ids()
+        ids = load_latest_status_ids()
         if 'bookmarks' in ids:
             last_id = ids['bookmarks']
 
@@ -66,10 +65,10 @@ class TwitterFeedMapper(SocialNetworkFeed):
             tweets = self.CLIENT.client.favorites(screen_name=self.CLIENT.username, since_id=last_id)
 
         # convert tweets to application specific status objects
-        statuses = self._convert_tweets_to_native_statuses(tweets)
+        statuses = convert_tweets_to_native_statuses(tweets)
 
         if len(statuses) > 0:
-            self._update_latest_status_ids('bookmarks', statuses[0].id)
+            update_latest_status_ids('bookmarks', statuses[0].id)
 
         return statuses
 
@@ -77,67 +76,22 @@ class TwitterFeedMapper(SocialNetworkFeed):
         tweets = self.CLIENT.client.home_timeline(screen_name=self.CLIENT.username, count=5)
 
         # convert tweets to application specific status objects
-        statuses = self._convert_tweets_to_native_statuses(tweets)
+        statuses = convert_tweets_to_native_statuses(tweets)
 
         return statuses
 
     def get_community_feed(self):
         lists = self.CLIENT.client.lists_all(screen_name=self.CLIENT.username)
 
-        statuses = []
-        for group in lists:
-            statuses.extend(self.CLIENT.client.list_timeline(group.user.screen_name, group.slug, count=10))
+        members = []
+        for community in lists:
+            members.extend(self.get_list_member_content(community.user.screen_name, community.slug))
 
-        return self._convert_tweets_to_native_statuses(statuses)
+        return members
 
     # support functions
-    def _convert_tweets_to_native_statuses(self, tweets):
-        statuses = []
-
-        for tweet in tweets:
-            statuses.append(SocialNetworkStatus(native_identifier=tweet.id, text=refine_tweet_text(tweet.text),
-                                                created=str(tweet.created_at), score=self._generate_tweet_score(tweet)))
-
-        return statuses
-
-    @staticmethod
-    def _load_latest_status_ids():
-        file_name = "twitter_since_ids.txt"
-        file_path = os.path.realpath('.') + '/' + file_name
-
-        ids = dict()
-
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
-                for line in file:
-                    if ":" in line:
-                        content = re.split('[:]', line)
-                        ids[content[0]] = content[1].strip('\n')
-
-        return ids
-
-    def _update_latest_status_ids(self, key, value):
-        file_name = "twitter_since_ids.txt"
-        file_path = os.path.realpath('.') + '/' + file_name
-
-        ids = self._load_latest_status_ids()
-
-        ids[key] = value
-        with open(file_path, 'w+') as file:
-            for key, value in ids.items():
-                file.write(key + ":" + str(value) + "\n")
-
-    @staticmethod
-    def _generate_tweet_score(tweet):
-        starting_score = 100
-        starting_score += 10 * tweet.retweet_count
-        starting_score += 1 * tweet.favorite_count
-        base_score = math.log(max(starting_score, 1))
-
-        return base_score
-
-    def get_twitter_trends(self, woeid):
-        response_data = self.CLIENT.client.trends_place(woeid)
+    def get_twitter_trends(self, woe_id):
+        response_data = self.CLIENT.client.trends_place(woe_id)
 
         trends = []
 
@@ -145,6 +99,36 @@ class TwitterFeedMapper(SocialNetworkFeed):
             trends.append(refine_entities(content['name']))
 
         return trends
+
+    def get_statuses_text(self, username):
+        if username:
+            try:
+                tweets = self.CLIENT.client.user_timeline(screen_name=username, count=5)
+            except TweepError:
+                return None
+
+            content = []
+            for tweet in tweets:
+                content.append(refine_tweet_text(tweet.text))
+
+            return " ".join(content)
+        else:
+            return None
+
+    def get_list_member_content(self, owner, slug):
+        if owner and slug:
+            members = self.CLIENT.client.list_members(owner, slug)
+
+            member_screen_names = [member.screen_name for member in members]
+
+            member_content = []
+            for identifier in member_screen_names:
+                member_content.append(get_member_instance(identifier, self.get_statuses_text(identifier)))
+
+            print(member_content)
+            return member_content
+        else:
+            return None
 
 
 # temp main method
@@ -178,7 +162,4 @@ if __name__ == "__main__":
     #
     # print(string)
 
-    list = mapper.get_community_feed()
-
-    for item in list:
-        print(item.text + ": " + str(item.get_score))
+    print(mapper.get_community_feed())

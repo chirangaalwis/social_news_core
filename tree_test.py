@@ -1,22 +1,25 @@
-import os
-import sys
 from retrying import retry
 from treelib import Node, Tree
 from urllib.error import HTTPError
 from SPARQLWrapper import SPARQLWrapper, JSON, SPARQLExceptions
 
-sys.path.insert(0, os.path.realpath('..'))
 from models import Tag
 from social_network_text_refinement import camel_case_split
+
+# temp
+from social_network_helper import get_ontology_types
 
 
 # temp
 def get_tags():
-    tag1 = Tag(topic='BO', context={'sub_types': ['Agent', 'Person', 'Office Holder']})
-    tag2 = Tag(topic='SO', context={'sub_types': ['Agent', 'Person', 'Noble']})
-    tag3 = Tag(topic='SOS', context={'sub_types': ['Agent', 'Person', 'Organisation Member', 'Sports Team Member']})
+    tags = []
 
-    return [tag1, tag2, tag3]
+    terms = ['Manchester United F.C.', 'Mona Lisa', 'Mahinda Rajapaksa', 'José Mourinho', 'The Count of Monte Cristo']
+
+    for term in terms:
+        tags.append(Tag(topic=term, context={'sub_types': get_ontology_types(term)}))
+
+    return tags
 
 
 def create_branch(tree_structure, types):
@@ -43,7 +46,6 @@ def get_ontology_super_class(subclass):
         return None
 
     sparql = SPARQLWrapper("http://dbpedia.org/sparql")
-
     sparql.setQuery("""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?superclass
@@ -56,8 +58,8 @@ def get_ontology_super_class(subclass):
     sparql.setReturnFormat(JSON)
     try:
         results = sparql.query().convert()
-    except (SPARQLExceptions.EndPointInternalError,
-            SPARQLExceptions.EndPointNotFound, SPARQLExceptions.QueryBadFormed, HTTPError):
+    except (HTTPError, SPARQLExceptions.EndPointInternalError,
+            SPARQLExceptions.EndPointNotFound, SPARQLExceptions.QueryBadFormed):
         raise Exception("Retry!")
 
     try:
@@ -79,8 +81,11 @@ def _sort_class_order(types):
 
     child_parent = {}
     for class_type in types:
-        super_class = get_ontology_super_class(class_type)
-        child_parent[class_type] = super_class
+        try:
+            super_class = get_ontology_super_class(class_type)
+            child_parent[class_type] = super_class
+        except Exception:
+            return ordered
 
     parent = _return_key(child_parent, None)
     ordered.append(parent)
@@ -102,20 +107,29 @@ def _return_key(dictionary, value):
     return matching_value
 
 
-if __name__ == "__main__":
+def build_interest_topic_tree(tags):
+    if not tags:
+        return None
+
     clusters = Tree()
 
-    # for tag in get_tags():
-    #     sub_types = tag.context['sub_types']
-    #     # create_branch(clusters, sub_types)
-    #
-    #     for sub_type in sub_types:
-    #         superclass = get_ontology_super_class(sub_type)
-    #         if superclass is not None:
-    #             print(superclass + ' | ' + sub_type)
+    for tag in get_tags():
 
-    # clusters.show()
+        try:
+            sub_types = tag.context['sub_types']
+        except (KeyError, TypeError):
+            continue
 
-    classes = ['Sports Team Member', 'Person', 'Agent', 'Organisation Member']
-    classes = ['Artwork', 'Work']
-    print(_sort_class_order(classes))
+        if sub_types is not None:
+            sorted_types = _sort_class_order(sub_types)
+            sorted_types.insert(0, 'Thing')
+            create_branch(clusters, sorted_types)
+
+    return clusters
+
+
+if __name__ == "__main__":
+    interests = build_interest_topic_tree(get_tags())
+
+    interests.show()
+

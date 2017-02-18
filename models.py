@@ -1,4 +1,5 @@
 from math import sqrt
+import hashlib
 
 
 class SocialNetworkFeed:
@@ -55,6 +56,27 @@ class SocialNetworkTrend:
         return not self.__eq__(other)
 
 
+class SocialNetworkMember:
+    def __init__(self, identifier, content):
+        self.identifier = identifier
+        self.content = content
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            if self.identifier == other.identifier:
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return int(hashlib.sha1(self.identifier.encode('utf-8')).hexdigest(), 16) % (10 ** 8)
+
+
 class Tag:
     def __init__(self, topic, context, context_fraction=0):
         self.topic = topic
@@ -104,7 +126,8 @@ class ZScore:
         # The rate at which the historic data's effect will diminish
         self.decay = decay
 
-        for x in past: self.update(x)
+        for x in past:
+            self.update(x)
 
     def update(self, value):
         # Set initial averages to the first value in the sequence
