@@ -20,70 +20,90 @@ from models import SocialNetworkTrend, Tag, ZScore
 from google_trends_client import get_pytrends
 from social_network_text_refinement import camel_case_split, entity_fraction_from_text
 
-GOOGLE_TRENDS = get_pytrends()
+# GOOGLE_TRENDS = get_pytrends()
+#
+#
+# @retry(wait_exponential_multiplier=1000, wait_exponential_max=20000, stop_max_delay=120000)
+# def get_historical_trends(keywords):
+#     payload = {'q': keywords, 'date': 'now 12-H'}
+#
+#     try:
+#         response = GOOGLE_TRENDS.trend(payload, return_type='json')
+#     except (ResponseError, JSONDecodeError, RateLimitError):
+#         raise Exception("Retry!")
+#
+#     results = OrderedDict()
+#
+#     for row in response['table']['rows']:
+#         results.update({row['c'][0]['f']: row['c'][1]['v']})
+#
+#     return results
+#
+#
+# def get_zscore(keywords):
+#     historical_trends = []
+#     data = {}
+#
+#     try:
+#         data = get_historical_trends(keywords)
+#     except Exception:
+#         print('arrived')
+#
+#     if not data:
+#         return -1
+#
+#     for date, value in data.items():
+#         historical_trends.append(value)
+#
+#     historical_trends = list(reversed(historical_trends))
+#
+#     historical_trends = [x for x in historical_trends if x is not None]
+#
+#     current_trend = historical_trends[0]
+#
+#     historical_trends = historical_trends[1:]
+#
+#     z_score = ZScore(0.9, historical_trends)
+#     return z_score.get_score(current_trend)
+#
+#
+# def get_social_trend(index, queue, results):
+#     factor = int(index / 4)
+#     sleep(factor * 60)
+#
+#     term = queue.get()
+#     z_score = get_zscore(term)
+#     results.append(SocialNetworkTrend(topic=term, score=z_score))
+#     queue.task_done()
 
 
-@retry(wait_exponential_multiplier=1000, wait_exponential_max=20000, stop_max_delay=120000)
-def get_historical_trends(keywords):
-    payload = {'q': keywords, 'date': 'now 12-H'}
+def get_named_entity_tags(text):
+    entities = extract_entities(text)
+    entities = entity_fraction_from_text(entities, text)
 
-    try:
-        response = GOOGLE_TRENDS.trend(payload, return_type='json')
-    except (ResponseError, JSONDecodeError, RateLimitError):
-        raise Exception("Retry!")
+    tags = []
 
-    results = OrderedDict()
+    for entity in entities:
+        data = get_ontology_data(entity['entity'])
 
-    for row in response['table']['rows']:
-        results.update({row['c'][0]['f']: row['c'][1]['v']})
+        if not data:
+            data = get_ontology_data(entity['entity'])
 
-    return results
+        for datum in data:
+            context = {'type': datum[1], 'description': datum[2], 'sub_types': datum[4]}
 
+            tag = Tag(datum[0], context, context_fraction=entity['fraction'])
+            if tag not in tags:
+                tags.append(tag)
 
-def get_zscore(keywords):
-    historical_trends = []
-    data = {}
-
-    try:
-        data = get_historical_trends(keywords)
-    except Exception:
-        print('arrived')
-
-    if not data:
-        return -1
-
-    for date, value in data.items():
-        historical_trends.append(value)
-
-    historical_trends = list(reversed(historical_trends))
-
-    historical_trends = [x for x in historical_trends if x is not None]
-
-    current_trend = historical_trends[0]
-
-    historical_trends = historical_trends[1:]
-
-    z_score = ZScore(0.9, historical_trends)
-    return z_score.get_score(current_trend)
+    return tags
 
 
-def get_social_trend(index, queue, results):
-    # temp
-    factor = int(index / 4)
-    print('sleeping ' + str(factor * 60))
-    sleep(factor * 60)
+def extract_entities(text):
+    if text is None:
+        return []
 
-    term = queue.get()
-
-    print(term)
-
-    z_score = get_zscore(term)
-    results.append(SocialNetworkTrend(topic=term, score=z_score))
-    queue.task_done()
-
-
-def get_named_entities(text):
-    # Create the AlchemyAPI Object
+    # create the AlchemyAPI Object
     alchemy_api = AlchemyAPI()
 
     response = alchemy_api.entities('text', text)
@@ -96,29 +116,7 @@ def get_named_entities(text):
         print('Error in entity extraction call: ', response['statusInfo'])
         return []
 
-    entities = entity_fraction_from_text(entities, text)
-
-    tags = []
-
-    for entity in entities:
-
-        data = get_ontology_data(entity['entity'])
-
-        if not data:
-            data = get_ontology_data(entity['entity'])
-
-        for datum in data:
-
-            # TODO: to be fixed DBpedia issue
-            # context = {'type': datum[1], 'description': datum[2], 'sub_types': datum[4]}
-
-            context = {'type': datum[1], 'description': datum[2]}
-
-            tag = Tag(datum[0], context, context_fraction=entity['fraction'])
-            if tag not in tags:
-                tags.append(tag)
-
-    return tags
+    return entities
 
 
 @retry(wait_exponential_multiplier=1000, wait_exponential_max=20000, stop_max_delay=120000)
@@ -154,16 +152,16 @@ def get_ontology_types(subject):
     return types
 
 
-def get_google_knowledge_graph_result(keyword):
-    # Improve mechanism to retrieve the key
-    kg_key = open(os.path.join(os.path.expanduser('~'), 'knowledge-graph-key')).read()
+def get_knowledge_graph_result(keyword):
+    # improve mechanism to retrieve the key
+    kg_key = os.environ['GOOGLE_KNOWLEDGE_GRAPH_KEY']
 
-    r = requests.get("https://kgsearch.googleapis.com/v1/entities:search",
-                     params=dict(query=keyword, key=kg_key, limit=3))
+    request = requests.get(
+        "https://kgsearch.googleapis.com/v1/entities:search", params=dict(query=keyword, key=kg_key, limit=3))
 
-    jsonld = json.loads(r.text)
+    json_ld = json.loads(request.text)
 
-    normalized = pyld.jsonld.normalize(jsonld, {'algorithm': 'URDNA2015', 'format': 'application/nquads'})
+    normalized = pyld.jsonld.normalize(json_ld, {'algorithm': 'URDNA2015', 'format': 'application/nquads'})
 
     g = rdflib.Graph()
     g.parse(data=normalized, format='n3')
@@ -196,15 +194,31 @@ def get_google_knowledge_graph_result(keyword):
     return result
 
 
+def refine_knowledge_graph_result(result):
+    if result is None:
+        return []
+
+    rows = re.split('\r', result.decode("utf-8"))
+
+    # discard first row of headers
+    rows = rows[1:]
+
+    # strip string newline characters
+    for index in range(len(rows)):
+        rows[index] = (rows[index].replace('\n', '').replace('"', ''))
+
+    return rows
+
+
 def get_ontology_data(keyword):
-    result = get_google_knowledge_graph_result(keyword)
+    result = refine_knowledge_graph_result(get_knowledge_graph_result(keyword))
 
     if not result:
         return []
 
-    # Split the result set data
+    # split the result set data
     entities = []
-    for line in re.split('\r', result.decode("utf-8")):
+    for line in result:
         if not line:
             continue
 
@@ -222,18 +236,14 @@ def get_ontology_data(keyword):
         results.extend(results[2].rsplit(',', 1))
         del results[2]
 
-        # TODO: check DBpedia bug
+        try:
+            types = get_ontology_types(results[0])
+        except Exception:
+            types = []
 
-        # types = get_ontology_types(results[0])
-        #
-        # print(types)
-        #
-        # results.append(list(set(types) - {results[1].lower()}))
+        results.append(list(set(types) - {results[1].title()}))
 
         entities.append(results)
-
-    # Delete the headers
-    del entities[0]
 
     index = 0
     result = None
@@ -253,7 +263,7 @@ def get_ontology_data(keyword):
 def get_status_text(status):
     tags = []
     if status.text:
-        tags = get_named_entities(status.text)
+        tags = get_named_entity_tags(status.text)
 
     status_record = {'Id': status.id, 'Created_At': status.created, 'Score': status.get_score, 'Tags': tags}
 
@@ -340,13 +350,26 @@ def convert_dictionary_to_tag(dictionary):
         return None
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
+#
+# string = 'It is only two months since Henrikh Mkhitaryan was the man in the same position Anthony Martial ' \
+    # 'currently finds himself in. Held accountable for a poor workrate in the derby defeat to Manchester City ' \
+    # 'in September, Mkhitaryan had to take the long road back into Jose Mourinho’s plans. Mkhitaryan is ' \ 'a great
+    #  player. Martial must learn from Mkhitaryan. Hail Henrikh Mkhitaryan. Come one Henrikh!!! ' \ 'European
+    # Organization for Nuclear Research is a great place to be. Anthony Martial has been to the ' \ 'Nuclear ' \
+    # 'Research center.'
+#
+#     for entity in extract_entities(string):
+#         print(entity)
 
-    print(get_ontology_types('Manchester United F.C.'))
-    print(get_ontology_types('Mona Lisa'))
-    print(get_ontology_types('Mahinda Rajapaksa'))
-    print(get_ontology_types('José Mourinho'))
-    print(get_ontology_types('The Count of Monte Cristo'))
+    # for tag in get_named_entities(string):
+    #     print(tag.topic + ' ' + str(tag.context))
+
+    # print(get_ontology_types('Manchester United F.C.'))
+    # print(get_ontology_types('Mona Lisa'))
+    # print(get_ontology_types('Mahinda Rajapaksa'))
+    # print(get_ontology_types('José Mourinho'))
+    # print(get_ontology_types('The Count of Monte Cristo'))
 
     # print(get_historical_trends('Manchester United'))
     # print(get_zscore('Manchester United'))

@@ -1,5 +1,6 @@
 from math import sqrt
 import hashlib
+from json import JSONEncoder
 
 
 class SocialNetworkFeed:
@@ -56,7 +57,7 @@ class SocialNetworkTrend:
         return not self.__eq__(other)
 
 
-class SocialNetworkMember:
+class SocialNetworkMember(JSONEncoder):
     def __init__(self, identifier, content):
         self.identifier = identifier
         self.content = content
@@ -76,9 +77,15 @@ class SocialNetworkMember:
     def __hash__(self):
         return int(hashlib.sha1(self.identifier.encode('utf-8')).hexdigest(), 16) % (10 ** 8)
 
+    def __str__(self):
+        return self.identifier
+
+    def default(self, o):
+        return o.__dict__
+
 
 class Tag:
-    def __init__(self, topic, context, context_fraction=0):
+    def __init__(self, topic, context=None, context_fraction=0):
         self.topic = topic
         self.context = context
         self.context_fraction = context_fraction
@@ -116,6 +123,9 @@ class Tag:
 
         return product_of_context
 
+    def __str__(self):
+        return self.topic + ' ' + str(self.context)
+
 
 class ZScore:
     def __init__(self, decay, past=None):
@@ -148,3 +158,7 @@ class ZScore:
             return (obs - self.avg) * float("infinity")
         else:
             return (obs - self.avg) / self.standard_deviation()
+
+if __name__ == "__main__":
+    tag = Tag(topic='Man Utd', context={})
+    print(tag)

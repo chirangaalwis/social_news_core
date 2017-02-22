@@ -58,13 +58,13 @@ def load_followings_feed():
 
 
 def load_community_feed():
-    statuses = []
+    members = []
 
     for feed in SOCIAL_NETWORK_FEED:
         if isinstance(feed, SocialNetworkFeed):
-            statuses.extend(feed.get_community_feed())
+            members.extend(feed.get_community_feed())
 
-    return statuses
+    return members
 
 
 def store_user_timeline_feed(statuses):

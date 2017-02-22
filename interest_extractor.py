@@ -1,6 +1,7 @@
-from social_network_helper import load_statuses, get_social_trend
+from social_network_helper import load_statuses
 from social_network_data_updater import load_user_timeline_feed, load_bookmarks_feed, load_followings_feed, \
-    store_user_timeline_feed, store_bookmarks_feed, load_trends
+    store_user_timeline_feed, store_bookmarks_feed, load_trends, load_community_feed
+from social_network_communities import cluster_community_members
 
 import os
 
@@ -11,28 +12,30 @@ STATUSES_FILE_PATH = os.path.realpath('.') + '/statuses.jsonl'
 BOOKMARKS_FILE_PATH = os.path.realpath('.') + '/bookmarks.jsonl'
 
 
-def compute_public_trends():
-    trends = [trend for trend in load_trends() if trend is not None]
+# def compute_public_trends():
+#     trends = [trend for trend in load_trends() if trend is not None]
+#
+#     trends = trends[:2]
+#
+#     results = []
+#
+#     q = queue.Queue(maxsize=0)
+#     num_threads = len(trends)
+#
+#     for i in range(num_threads):
+#         worker = Thread(target=get_social_trend, args=(i, q, results))
+#         worker.setDaemon(True)
+#         worker.start()
+#
+#     for keyword in trends:
+#         q.put(keyword)
+#
+#     q.join()
+#
+#     for result in results:
+#         print(result.topic + ' ' + str(result.score))
 
-    trends = trends[:2]
 
-    results = []
-
-    q = queue.Queue(maxsize=0)
-    num_threads = len(trends)
-
-    for i in range(num_threads):
-        worker = Thread(target=get_social_trend, args=(i, q, results))
-        worker.setDaemon(True)
-        worker.start()
-
-    for keyword in trends:
-        q.put(keyword)
-
-    q.join()
-
-    for result in results:
-        print(result.topic + ' ' + str(result.score))
 
     # for trend in load_trends():
     #     if trend is not None:
@@ -95,7 +98,12 @@ def compute_interests():
 
 
 def compute_community_interests():
-    return None
+    members = load_community_feed()
+
+    # temp 10
+    community_interest_tree = cluster_community_members(members[:10])
+
+    community_interest_tree.show()
 
 
 # temp main method
@@ -112,4 +120,6 @@ if __name__ == "__main__":
 
     # compute_interests()
 
-    compute_public_trends()
+    # compute_public_trends()
+
+    compute_community_interests()

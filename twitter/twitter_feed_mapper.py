@@ -125,7 +125,6 @@ class TwitterFeedMapper(SocialNetworkFeed):
             for identifier in member_screen_names:
                 member_content.append(get_member_instance(identifier, self.get_statuses_text(identifier)))
 
-            print(member_content)
             return member_content
         else:
             return None
